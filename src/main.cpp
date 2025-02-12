@@ -78,6 +78,7 @@ int adc_value = 0;
 unsigned long lastTimeStamp = 0;
 unsigned long last_charging_pub_TimeStamp = 0; //last timestamp velocity command received from ROS
 unsigned long last_bump_pub_TimeStamp = 0; //last timestamp battery status published
+unsigned long lastSuccessfulComm = 0; 
 
 //Micro ROS variables
 // rcl_subscription_t cmd_vel_sub;
@@ -177,7 +178,18 @@ void loop()
   // Get the current time
   // clock_gettime(CLOCK_REALTIME, &ts);
   
-  RCSOFTCHECK(rclc_executor_spin_some(&executor, RCL_MS_TO_NS(100)));
+  RCSOFTCHECK( rclc_executor_spin_some(&executor, RCL_MS_TO_NS(100)));
+  
+  // Check if ros2 agent is connected
+  if(rmw_uros_ping_agent(500, 1) == RMW_RET_OK) {
+        lastSuccessfulComm = millis(); // Reset timer on successful communication
+  }
+  // Check if connection timeout exceeded
+  if (millis() - lastSuccessfulComm > 1000) {
+      Serial.println("Lost connection to ROS 2 Agent. Restarting ESP32...");
+      delay(100); // Short delay before restart
+      esp_restart(); // Reset the ESP32
+  }
 
   
   if(millis() - last_bump_pub_TimeStamp > 100){  //Report every 200ms
