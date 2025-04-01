@@ -19,10 +19,14 @@
  */
 
  #include <Arduino.h>
+ #include <Wire.h>
  #include <esp_system.h>
- 
  #include <time.h>
  #include "esp_timer.h"
+ #include "INA226.h"
+
+ INA226 INA0(0x40);
+ 
  
  void restartEsp(void *arg) {
      // Serial.println("Restarting via Timer...");
@@ -37,6 +41,8 @@
  float estimateDirection();
  float calculateMedian(float arr[], int size) ;
  float getVoltage();
+ float getCurrent();
+ float getPower();
  
  
  const int bumpPin = 27;
@@ -46,7 +52,7 @@
  // IR array variables
  const int numArray = 9;
  // Define pin numbers for the IR receivers
- const int irPins[] = {15, 2, 4, 16, 17, 5, 18, 19, 23};  // Array to hold the IR receiver pin numbers
+ const int irPins[] = {15, 25, 4, 16, 17, 5, 18, 19, 23};  // Array to hold the IR receiver pin numbers
  int irValues[numArray];  // Array to store the IR receiver values
  
  const int medianWindowSize = 10; // Size of the moving window
@@ -81,6 +87,8 @@
  
  int bumpState = 0;
  float voltage = 0;
+ float current = 0;
+ float power   = 0;
  
  void setup(void)
  {
@@ -88,20 +96,31 @@
    
    pinMode(bumpPin, INPUT_PULLUP);
    pinMode(voltageSensorPin, INPUT);
-   pinMode(2, OUTPUT);
  
    // IR array setup
    // Initialize the IR receiver pins as input using a for loop
    for (int i = 0; i < numArray; i++) {
      pinMode(irPins[i], INPUT);
    }
+
  
    // Initialize the direction history array with -1 (no signal detected)
    for (int i = 0; i < medianWindowSize; i++) {
      directionHistory[i] = -1;
    }
  
- 
+  // Setup INA226=====
+  Serial.print("INA226_LIB_VERSION: ");
+  Serial.println(INA226_LIB_VERSION);
+
+  Wire.begin();
+  if (!INA0.begin() )
+  {
+    Serial.println("INA0 could not connect. Fix and Reboot");
+  }
+  INA0.setMaxCurrentShunt(1, 0.002);
+
+
    // Create a hardware timer to trigger every 10 minutes
    esp_timer_create_args_t timer_args = {};
    timer_args.callback = &restartEsp;
@@ -116,16 +135,16 @@
  {
    if (!Serial) {  
      delay(1000);  // Wait before retrying
-     digitalWrite(2,HIGH);
-     delay(50);
-     digitalWrite(2,LOW);
      esp_restart();  // Reset ESP32 if no serial connection is found
    }
  
    // Read values from the IR receivers and store in the array using a for loop
    for (int i = 0; i < numArray; i++) {
      irValues[i] = !digitalRead(irPins[i]);
+    //  Serial.print(irValues[i]);
+    //  Serial.print(",");
    }
+  //  Serial.println();
  
    // Process the sensor values to estimate the direction
    float direction = estimateDirection();
@@ -141,11 +160,14 @@
    if(millis() - last_bump_pub_TimeStamp > 100){  //Report every 200ms
      bumpState = (int)!digitalRead(bumpPin);
      voltage = getVoltage();
+     current = getCurrent();
+     power = getPower();
+
      last_bump_pub_TimeStamp = millis();
  
      // Format message as a single `const char` string
      char message[50];  // Adjust size if needed
-     snprintf(message, sizeof(message), "B%d,W%.2f,V%.2f\n", bumpState, median, voltage);
+     snprintf(message, sizeof(message), "B%d,W%.2f,V%.2fC%.2f\n", bumpState, median, voltage, current);
  
      // Send the formatted message
      Serial.write(message, strlen(message));
@@ -161,22 +183,22 @@
  }//end void loop()
  
  
- float getVoltage(){
-   // Read the Analog Input
-   adc_value = analogRead(voltageSensorPin);
-   adc_value += analogRead(voltageSensorPin); //take 2nd reading
- 
-   adc_value = adc_value / 2; //Take average
-   
-   // Determine voltage at ADC input
-   adc_voltage  = (adc_value * ref_voltage) / 4096.0;
-   
-   // Calculate voltage at divider input
-   in_voltage = adc_voltage*(R1+R2)/R2;
- 
-   return in_voltage;
+float getVoltage(){
+   float voltage_ = INA0.getBusVoltage();
+   return voltage_;
  }
  
+float getCurrent(){
+  float current_ = INA0.getCurrent_mA();
+  // getPower_mW
+  return current_;
+}
+
+float getPower(){
+  float power_ = INA0.getPower_mW();
+  return power_;
+}
+
  // Function to estimate the direction based on active sensors
  float estimateDirection() {
    int activeSensors = 0;    // Count of active sensors
