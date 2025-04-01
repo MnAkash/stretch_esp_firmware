@@ -167,7 +167,7 @@
  
      // Format message as a single `const char` string
      char message[50];  // Adjust size if needed
-     snprintf(message, sizeof(message), "B%d,W%.2f,V%.2fC%.2f\n", bumpState, median, voltage, current);
+     snprintf(message, sizeof(message), "B%d,W%.2f,V%.2f,C%.4f\n", bumpState, median, voltage, current);
  
      // Send the formatted message
      Serial.write(message, strlen(message));
@@ -189,8 +189,8 @@ float getVoltage(){
  }
  
 float getCurrent(){
-  float current_ = INA0.getCurrent_mA();
-  // getPower_mW
+  float current_ = INA0.getCurrent_mA()/1000.0;
+  
   return current_;
 }
 
