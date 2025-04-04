@@ -38,6 +38,7 @@
  void publishBumpSensor();
  void publishChargingVoltage();
  void publishIRSensorWeight(float weight);
+ void readIRSensors();
  float estimateDirection();
  float calculateMedian(float arr[], int size) ;
  float getVoltage();
@@ -55,26 +56,17 @@
  const int irPins[] = {15, 25, 4, 16, 17, 5, 18, 19, 23};  // Array to hold the IR receiver pin numbers
  int irValues[numArray];  // Array to store the IR receiver values
  
+ float direction = -1;
+ float pre_direction = -1;
+ float median = -1;
  const int medianWindowSize = 10; // Size of the moving window
  float directionHistory[medianWindowSize]; // Array to store the last 10 directions
  int historyIndex = 0; // Current index in the history array
  int historyCount = 0; // Number of values added so far
  
  
- 
- // Floats for ADC voltage & Input voltage
- float adc_voltage = 0.0;
- float in_voltage = 0.0;
-  
- // Floats for resistor values in divider (in ohms)
- float R1 = 30000.0;
- float R2 = 7500.0; 
-  
  // Float for Reference Voltage
  float ref_voltage = 3.3;
-  
- // Integer for ADC value
- int adc_value = 0;
  
  //Last state saver
  unsigned long lastTimeStamp = 0;
@@ -138,24 +130,25 @@
      esp_restart();  // Reset ESP32 if no serial connection is found
    }
  
-   // Read values from the IR receivers and store in the array using a for loop
-   for (int i = 0; i < numArray; i++) {
-     irValues[i] = !digitalRead(irPins[i]);
-    //  Serial.print(irValues[i]);
-    //  Serial.print(",");
-   }
-  //  Serial.println();
+  // Read values from the IR receivers
+  readIRSensors();
  
    // Process the sensor values to estimate the direction
-   float direction = estimateDirection();
- 
+   direction = estimateDirection();
+   
+   if(median > -1){
+    if(direction == -1){
+      direction = pre_direction;
+    }
+   }
+
    // Add the new direction to the history
    directionHistory[historyIndex] = direction;
    historyIndex = (historyIndex + 1) % medianWindowSize; // Update the index circularly
    historyCount = min(historyCount + 1, medianWindowSize); // Keep track of the number of values
  
    // Calculate and print the moving median
-   float median = calculateMedian(directionHistory, historyCount);
+   median = calculateMedian(directionHistory, historyCount);
  
    if(millis() - last_bump_pub_TimeStamp > 100){  //Report every 200ms
      bumpState = (int)!digitalRead(bumpPin);
@@ -176,12 +169,22 @@
  
    // Delay for a short period before the next reading
    delay(15); // Adjust delay as needed
- 
+
+  if(direction != 1) pre_direction = direction; // Previous valid sensor value
    
  
    
  }//end void loop()
  
+void readIRSensors(){
+  // Read values from the IR receivers and store in the array using a for loop
+  for (int i = 0; i < numArray; i++) {
+    irValues[i] = !digitalRead(irPins[i]);
+    // Serial.print(irValues[i]);
+    // Serial.print(",");
+  }
+  // Serial.println();
+}
  
 float getVoltage(){
    float voltage_ = INA0.getBusVoltage();
