@@ -81,7 +81,7 @@
  float voltage = 0;
  float current = 0;
  float power   = 0;
- 
+ int zeroCount = 0;
  void setup(void)
  {
    Serial.begin(115200); //Feedback over Serial Monitor and main controller
@@ -157,6 +157,16 @@
      power = getPower();
 
      last_bump_pub_TimeStamp = millis();
+
+     // If current is 0 for 5 times, restart the ESP32
+      if (current == 0) {
+        zeroCount++;
+        if (zeroCount >= 5) {
+          zeroCount = 0; // Reset the count
+          Serial.println("Restarting ESP32 for zero current...");
+          esp_restart();
+        }
+      }
  
      // Format message as a single `const char` string
      char message[50];  // Adjust size if needed
